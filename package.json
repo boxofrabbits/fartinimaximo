@@ -1,0 +1,55 @@
+{
+    "author": "November Tango",
+    "dependencies": {},
+    "keywords": [],
+    "name": "fartini",
+    "pebble": {
+        "displayName": "FARTINI",
+        "enableMultiJS": true,
+        "messageKeys": [],
+        "projectType": "native",
+        "resources": {
+            "media": [
+                {
+                    "file": "data/El Classico",
+                    "name": "FART_1",
+                    "targetPlatforms": null,
+                    "type": "raw"
+                },
+                {
+                    "file": "data/La Venganza",
+                    "name": "FART_5",
+                    "targetPlatforms": null,
+                    "type": "raw"
+                },
+                {
+                    "file": "data/El Pedito",
+                    "name": "FART_2",
+                    "targetPlatforms": null,
+                    "type": "raw"
+                },
+                {
+                    "file": "data/El Terremoto",
+                    "name": "FART_3",
+                    "targetPlatforms": null,
+                    "type": "raw"
+                },
+                {
+                    "file": "data/La Metralleta",
+                    "name": "FART_4",
+                    "targetPlatforms": null,
+                    "type": "raw"
+                }
+            ]
+        },
+        "sdkVersion": "3",
+        "targetPlatforms": [
+            "emery"
+        ],
+        "uuid": "2669cf08-ad48-4fa3-b691-98ff2787287f",
+        "watchapp": {
+            "watchface": false
+        }
+    },
+    "version": "1.0.0"
+}
