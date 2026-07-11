@@ -1,6 +1,8 @@
 /**
- * FART MACHINE for Pebble Time 2  (debug build v1.1)
- * UP/DOWN: choose  SELECT: fire  LONG SELECT: random
+ * FARTINI MAXIMO for Pebble Time 2  (v1.2 - one-shot mode)
+ * UP/DOWN: choose   SELECT: fire   LONG SELECT: random
+ * LONG DOWN: toggle One-Shot Mode (launch -> random fart -> auto-exit)
+ * During a one-shot fart, press any button to cancel exit and stay in the app.
  */
 
 #include <pebble.h>
@@ -8,8 +10,9 @@
 #define NUM_FARTS 5
 #define PUMP_INTERVAL_MS 25
 #define VOLUME 100
-#define CHUNK_BYTES 2048     // max bytes handed to the stream per pump
-#define MAX_STALLS 200       // ~5s of "buffer full" before giving up
+#define CHUNK_BYTES 2048
+#define MAX_STALLS 200
+#define PERSIST_KEY_ONESHOT 1
 
 static const uint32_t FART_RESOURCES[NUM_FARTS] = {
   RESOURCE_ID_FART_1, RESOURCE_ID_FART_2, RESOURCE_ID_FART_3,
@@ -32,8 +35,16 @@ static AppTimer *s_pump_timer = NULL;
 static bool s_playing = false;
 static int s_stalls = 0;
 
+static bool s_one_shot = false;       // the persisted setting
+static bool s_exit_after_play = false; // live flag for this launch
+
 static void prv_update_name(const char *override) {
   text_layer_set_text(s_name_layer, override ? override : FART_NAMES[s_current]);
+}
+
+static void prv_update_hint(void) {
+  text_layer_set_text(s_hint_layer,
+      s_one_shot ? "one-shot: ON (hold DOWN)" : "select: fire  hold DOWN: 1shot");
 }
 
 static void prv_cleanup_buffer(void) {
@@ -54,11 +65,11 @@ static void prv_pump(void *context) {
           (unsigned long)s_buf_offset, (unsigned long)s_buf_size);
 
   if (written > to_write) {
-    // Error value from the API (e.g. -1) - abort safely
     APP_LOG(APP_LOG_LEVEL_ERROR, "stream_write error (%lu), aborting",
             (unsigned long)written);
     speaker_stream_close();
     prv_cleanup_buffer();
+    s_exit_after_play = false;
     prv_update_name("write err :(");
     return;
   }
@@ -70,6 +81,7 @@ static void prv_pump(void *context) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "stream stalled, aborting");
     speaker_stream_close();
     prv_cleanup_buffer();
+    s_exit_after_play = false;
     prv_update_name("stalled :(");
     return;
   }
@@ -86,7 +98,6 @@ static void prv_pump(void *context) {
 static void prv_stop_playback(void) {
   prv_cleanup_buffer();
   if (s_playing) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "stopping active playback");
     speaker_stop();
     s_playing = false;
   }
@@ -96,6 +107,10 @@ static void prv_on_finish(SpeakerFinishReason reason, void *ctx) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "finish callback, reason=%d", (int)reason);
   s_playing = false;
   prv_update_name(NULL);
+  if (s_exit_after_play) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "one-shot complete, exiting");
+    window_stack_pop_all(true);  // empty stack ends the app
+  }
 }
 
 static void prv_play_fart(int index) {
@@ -105,6 +120,7 @@ static void prv_play_fart(int index) {
   prv_stop_playback();
 
   if (speaker_is_muted()) {
+    s_exit_after_play = false;
     prv_update_name("Muted!");
     return;
   }
@@ -114,20 +130,20 @@ static void prv_play_fart(int index) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "resource size=%lu", (unsigned long)s_buf_size);
 
   if (s_buf_size == 0) {
+    s_exit_after_play = false;
     prv_update_name("empty res :(");
     return;
   }
 
   s_buf = malloc(s_buf_size);
   if (!s_buf) {
-    APP_LOG(APP_LOG_LEVEL_ERROR, "malloc(%lu) failed, heap=%u",
-            (unsigned long)s_buf_size, (unsigned)heap_bytes_free());
+    APP_LOG(APP_LOG_LEVEL_ERROR, "malloc(%lu) failed", (unsigned long)s_buf_size);
+    s_exit_after_play = false;
     prv_update_name("no memory :(");
     return;
   }
 
   size_t loaded = resource_load(handle, s_buf, s_buf_size);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "loaded %u bytes", (unsigned)loaded);
   s_buf_size = loaded;
   s_buf_offset = 0;
   s_stalls = 0;
@@ -135,36 +151,64 @@ static void prv_play_fart(int index) {
   if (!speaker_stream_open(SpeakerPcmFormat_16kHz_8bit, VOLUME)) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "stream_open failed");
     prv_cleanup_buffer();
+    s_exit_after_play = false;
     prv_update_name("speaker busy :(");
     return;
   }
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "stream open OK");
 
   s_playing = true;
-  prv_update_name("* PFFFFT *");
+  prv_update_name(s_exit_after_play ? "* ADIOS *" : "* PFFFFT *");
   prv_pump(NULL);
 }
 
+// Any button press cancels a pending one-shot exit so you can reach settings
+static bool prv_cancel_oneshot_exit(void) {
+  if (s_exit_after_play) {
+    s_exit_after_play = false;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "one-shot exit cancelled by user");
+    return true;
+  }
+  return false;
+}
+
 static void prv_select_click(ClickRecognizerRef rec, void *ctx) {
+  if (prv_cancel_oneshot_exit()) { prv_update_name(NULL); return; }
   prv_play_fart(s_current);
 }
 static void prv_select_long_click(ClickRecognizerRef rec, void *ctx) {
+  prv_cancel_oneshot_exit();
   s_current = rand() % NUM_FARTS;
   prv_play_fart(s_current);
 }
 static void prv_up_click(ClickRecognizerRef rec, void *ctx) {
+  if (prv_cancel_oneshot_exit()) { prv_update_name(NULL); return; }
   s_current = (s_current + NUM_FARTS - 1) % NUM_FARTS;
   prv_update_name(NULL);
 }
 static void prv_down_click(ClickRecognizerRef rec, void *ctx) {
+  if (prv_cancel_oneshot_exit()) { prv_update_name(NULL); return; }
   s_current = (s_current + 1) % NUM_FARTS;
   prv_update_name(NULL);
 }
+static void prv_down_long_click(ClickRecognizerRef rec, void *ctx) {
+  prv_cancel_oneshot_exit();
+  s_one_shot = !s_one_shot;
+  persist_write_bool(PERSIST_KEY_ONESHOT, s_one_shot);
+  prv_update_name(s_one_shot ? "One-Shot ON" : "One-Shot OFF");
+  prv_update_hint();
+}
+
 static void prv_click_config(void *ctx) {
   window_single_click_subscribe(BUTTON_ID_SELECT, prv_select_click);
   window_long_click_subscribe(BUTTON_ID_SELECT, 0, prv_select_long_click, NULL);
   window_single_click_subscribe(BUTTON_ID_UP, prv_up_click);
   window_single_click_subscribe(BUTTON_ID_DOWN, prv_down_click);
+  window_long_click_subscribe(BUTTON_ID_DOWN, 0, prv_down_long_click, NULL);
+}
+
+static void prv_oneshot_kickoff(void *context) {
+  s_current = rand() % NUM_FARTS;
+  prv_play_fart(s_current);
 }
 
 static void prv_window_load(Window *window) {
@@ -197,7 +241,6 @@ static void prv_window_load(Window *window) {
 
   s_hint_layer = text_layer_create(
       GRect(0, bounds.size.h - 24, bounds.size.w, 24));
-  text_layer_set_text(s_hint_layer, "up/down: pick   select: fire");
   text_layer_set_font(s_hint_layer,
       fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_hint_layer, GTextAlignmentCenter);
@@ -205,6 +248,7 @@ static void prv_window_load(Window *window) {
   text_layer_set_text_color(s_hint_layer,
       PBL_IF_COLOR_ELSE(GColorPastelYellow, GColorBlack));
   layer_add_child(root, text_layer_get_layer(s_hint_layer));
+  prv_update_hint();
 }
 
 static void prv_window_unload(Window *window) {
@@ -216,7 +260,9 @@ static void prv_window_unload(Window *window) {
 
 static void prv_init(void) {
   srand(time(NULL));
+  s_one_shot = persist_read_bool(PERSIST_KEY_ONESHOT);
   speaker_set_finish_callback(prv_on_finish, NULL);
+
   s_window = window_create();
   window_set_click_config_provider(s_window, prv_click_config);
   window_set_window_handlers(s_window, (WindowHandlers) {
@@ -224,6 +270,12 @@ static void prv_init(void) {
     .unload = prv_window_unload,
   });
   window_stack_push(s_window, true);
+
+  if (s_one_shot) {
+    s_exit_after_play = true;
+    // Small delay so the window renders before the fart flies
+    app_timer_register(150, prv_oneshot_kickoff, NULL);
+  }
 }
 
 static void prv_deinit(void) {

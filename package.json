@@ -2,9 +2,9 @@
     "author": "November Tango",
     "dependencies": {},
     "keywords": [],
-    "name": "fartini",
+    "name": "fartini-maximo",
     "pebble": {
-        "displayName": "FARTINI",
+        "displayName": "FARTINI MAXIMO",
         "enableMultiJS": true,
         "messageKeys": [],
         "projectType": "native",
@@ -44,12 +44,13 @@
         },
         "sdkVersion": "3",
         "targetPlatforms": [
-            "emery"
+            "emery",
+            "flint"
         ],
         "uuid": "2669cf08-ad48-4fa3-b691-98ff2787287f",
         "watchapp": {
             "watchface": false
         }
     },
-    "version": "1.0.0"
+    "version": "1.1.0"
 }
