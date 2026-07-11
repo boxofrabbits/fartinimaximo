@@ -1,5 +1,5 @@
 /**
- * FARTINI MAXIMO for Pebble Time 2  (v1.2 - one-shot mode)
+ * FARTINI MAXIMO  (v1.3 - Pebble Time 2 + Pebble 2 Duo)
  * UP/DOWN: choose   SELECT: fire   LONG SELECT: random
  * LONG DOWN: toggle One-Shot Mode (launch -> random fart -> auto-exit)
  * During a one-shot fart, press any button to cancel exit and stay in the app.
@@ -221,7 +221,11 @@ static void prv_window_load(Window *window) {
   s_title_layer = text_layer_create(GRect(0, 8, bounds.size.w, 32));
   text_layer_set_text(s_title_layer, "FARTINI MAXIMO");
   text_layer_set_font(s_title_layer,
+#if PBL_DISPLAY_WIDTH >= 200
       fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+#else
+      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+#endif
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
   text_layer_set_background_color(s_title_layer, GColorClear);
   text_layer_set_text_color(s_title_layer,
@@ -231,7 +235,11 @@ static void prv_window_load(Window *window) {
   s_name_layer = text_layer_create(
       GRect(0, bounds.size.h / 2 - 34, bounds.size.w, 68));
   text_layer_set_font(s_name_layer,
+#if PBL_DISPLAY_WIDTH >= 200
       fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD));
+#else
+      fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+#endif
   text_layer_set_text_alignment(s_name_layer, GTextAlignmentCenter);
   text_layer_set_background_color(s_name_layer, GColorClear);
   text_layer_set_text_color(s_name_layer,
